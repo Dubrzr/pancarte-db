@@ -25,10 +25,10 @@ Writes:
 
 Read (you can combine these options):
 
-* Get data from date A to date B
-* Get data where record_length >= 2hours
-* Get data where bed_id=X, signal_type=ECG
-* Get data where there are arythmia annotations
+* [ ] Get data from date A to date B
+* [ ] Get data where record_length >= 2hours
+* [ ] Get data where bed_id=X, signal_type=ECG
+* [ ] Get data where there are arythmia annotations
 
 
 ## Running it
