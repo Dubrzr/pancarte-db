@@ -31,6 +31,16 @@ Read (you can combine these options):
 * [ ] Get data where there are arythmia annotations
 
 
+### How does it stores data?
+
+There are two types of data:
+
+* Immutable: waveforms and numerics
+* Editable/Expandable: metadata and annotations
+
+Immutable data is directly stored in files that are not supposed to be editable.
+Editable/Expandable data is stored in an easily queryable store (sqlite).
+
 ## Running it
 
 ```

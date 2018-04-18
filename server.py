@@ -1,36 +1,40 @@
-import sys
-
 from socketserver import ThreadingMixIn, TCPServer, BaseRequestHandler
 from concurrent.futures import ThreadPoolExecutor
 
+from handler import handle_query
 
-class MyTCPHandler(BaseRequestHandler):
-    """
-    The request handler class for our server.
 
-    It is instantiated once per connection to the server, and must
-    override the handle() method to implement communication to the
-    client.
-    """
+class TCPHandler(BaseRequestHandler):
 
     def handle(self):
-        # self.request is the TCP socket connected to the client
-        self.data = self.request.recv(1024).strip()
-        print("{} wrote:".format(self.client_address[0]))
-        print(self.data)
-        # just send back the same data, but upper-cased
-        self.request.sendall(self.data.upper())
+        def readlines(sock, delim, recv_buffer=1024):
+            buffer = b''
+            data = True
+            while data:
+                data = sock.recv(recv_buffer)
+                buffer += data
 
-class PoolMixIn(ThreadingMixIn):
-    def process_request(self, request, client_address):
-        self.pool.submit(self.process_request_thread, request, client_address)
+                while buffer.find(delim) != -1:
+                    line, buffer = buffer.split(delim, 1)
+                    yield line.decode('utf-8')
+            return
 
-def server(host, port):
-    class PoolTCPServer(PoolMixIn, TCPServer):
-        pool = ThreadPoolExecutor(max_workers=40)
+        for line in readlines(self.request, delim=b'\n'):
+            self.request.sendall(handle_query(line).encode('utf-8'))
 
-    with PoolTCPServer((host, port), MyTCPHandler) as tcp_server:
-        tcp_server.serve_forever()
 
-if __name__=="__main__":
-    server(sys.argv[1], int(sys.argv[2]))
+class Server:
+    def __init__(self, host, port, max_workers=42):
+        self.host = host
+        self.port = port
+        self.max_workers = max_workers
+
+    def run(self):
+        class PoolTCPServer(ThreadingMixIn, TCPServer):
+            pool = ThreadPoolExecutor(max_workers=self.max_workers)
+
+            def process_request(self, request, client_address):
+                self.pool.submit(self.process_request_thread, request, client_address)
+
+        with PoolTCPServer((self.host, self.port), TCPHandler) as tcp_server:
+            tcp_server.serve_forever()
