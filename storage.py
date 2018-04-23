@@ -156,9 +156,16 @@ class ImmutableStore:
                             number_of_values=len(values))
 
 
+class MutableStore:
+    def __init__(self):
+        pass
+
+
 class StorageAPI:
-    def __init__(self, location):
+    def __init__(self, location, immutable_store: ImmutableStore, mutable_store: MutableStore):
         self.location = location
+        self.immutable_store = immutable_store
+        self.mutable_store = mutable_store
 
     def write_immutable_record(self, source_id, signal_type_id, start_date, frequency, list_of_values):
         pass
