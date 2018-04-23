@@ -7,6 +7,10 @@ from sortedcontainers import SortedListWithKey
 import avro.schema
 import avro.io
 import avro.datafile
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from db.mappings import AnnotationType
 
 
 def dt_to_nano_timestamp(dt):
@@ -86,7 +90,8 @@ class MemoryCache:
 
 
 class ImmutableStore:
-    def __init__(self, location: str, avro_schema: str, cache_size: int=1E9, time_margin=datetime.timedelta(minutes=5)):
+    def __init__(self, location: str, avro_schema: str, cache_size: int = 1E9,
+                 time_margin=datetime.timedelta(minutes=5)):
         """
         cache_size: the number of values needed to dump the cache to disk
         """
@@ -157,8 +162,16 @@ class ImmutableStore:
 
 
 class MutableStore:
-    def __init__(self):
-        pass
+    def __init__(self, url="sqlite:///pancarte.sqlite3"):
+        self.sql_session = sessionmaker(bind=create_engine(url))()
+
+    def add_annotation_type(self, name):
+        at = AnnotationType(name=name)
+        self.sql_session.add(at)
+        self.sql_session.commit()
+
+    def get_annotation_type_id(self, name):
+        return self.sql_session.query(AnnotationType).filter(AnnotationType.name == name).one().id
 
 
 class StorageAPI:
