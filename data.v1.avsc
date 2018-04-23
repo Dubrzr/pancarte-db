@@ -1,0 +1,108 @@
+{
+    "namespace": "pancarte.avro",
+    "type": "record",
+    "name": "schema",
+    "fields": [
+        {
+            "name": "start_date",
+            "type": "long",
+            "logicalType" : "timestamp-micros"
+        },
+        {
+            "name": "hf",
+            "type": {
+                "type": "record",
+                "name": "hff",
+                "fields": [
+                    {
+                        "name": "source_id",
+                        "type": {
+                            "type": "array",
+                            "items": "long"
+                        }
+                    },
+                    {
+                        "name": "type_id",
+                        "type": {
+                            "type": "array",
+                            "items": "long"
+                        }
+                    },
+                    {
+                        "name": "start_date",
+                        "type": {
+                            "type": "array",
+                            "items": "long",
+                            "logicalType" : "timestamp-micros"
+                        }
+
+                    },
+                    {
+                        "name": "frequency",
+                        "type": {
+                            "type": "array",
+                            "items": "float"
+                        }
+                    },
+                    {
+                        "name": "values",
+                        "type": {
+                            "type": "array",
+                            "items": {
+                                "name": "valuess",
+                                "type": "record",
+                                "fields": [
+                                    {
+                                        "name": "v",
+                                        "type": {
+                                            "type": "array",
+                                            "items": "float"
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "lf",
+            "type": {
+                "type": "record",
+                "name": "lff",
+                "fields": [
+                    {
+                        "name": "source_id",
+                        "type": {
+                            "type": "array",
+                            "items": "long"
+                        }
+                    },
+                    {
+                        "name": "type_id",
+                        "type": {
+                            "type": "array",
+                            "items": "long"
+                        }
+                    },
+                    {
+                        "name": "timestamp",
+                        "type": {
+                            "type": "array",
+                            "items": "long",
+                            "logicalType" : "timestamp-micros"
+                        }
+                    },
+                    {
+                        "name": "value",
+                        "type": {
+                            "type": "array",
+                            "items": "float"
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+}
