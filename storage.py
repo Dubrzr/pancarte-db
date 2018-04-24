@@ -7,10 +7,11 @@ from sortedcontainers import SortedListWithKey
 import avro.schema
 import avro.io
 import avro.datafile
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, MetaData
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import sessionmaker, scoped_session
 
-from db.mappings import AnnotationType
+from db.tables import Base
 
 
 def dt_to_nano_timestamp(dt):
@@ -90,7 +91,7 @@ class MemoryCache:
 
 
 class ImmutableStore:
-    def __init__(self, location: str, avro_schema: str, cache_size: int = 1E9,
+    def __init__(self, location: str, avro_schema: str, cache_size: int = 1E10,
                  time_margin=datetime.timedelta(minutes=5)):
         """
         cache_size: the number of values needed to dump the cache to disk
@@ -163,25 +164,59 @@ class ImmutableStore:
 
 class MutableStore:
     def __init__(self, url="sqlite:///pancarte.sqlite3"):
-        self.sql_session = sessionmaker(bind=create_engine(url))()
+        self._engine = create_engine(url)
+        self._session_class = sessionmaker(bind=self._engine)
+        self.get_session = self._session_class()
 
-    def add_annotation_type(self, name):
-        at = AnnotationType(name=name)
-        self.sql_session.add(at)
-        self.sql_session.commit()
+        Base.metadata.create_all(self._engine)
 
-    def get_annotation_type_id(self, name):
-        return self.sql_session.query(AnnotationType).filter(AnnotationType.name == name).one().id
+    def create(self, model, **kwargs):
+        o = model(**kwargs)
 
+        session = self._session_class()
+        try:
+            session.add(o)
+            session.commit()
+            id = o.id
+        except IntegrityError:
+            session.rollback()
+            raise
+        finally:
+            session.close()
 
-class StorageAPI:
-    def __init__(self, location, immutable_store: ImmutableStore, mutable_store: MutableStore):
-        self.location = location
-        self.immutable_store = immutable_store
-        self.mutable_store = mutable_store
+        return self.get(model, id=id)
 
-    def write_immutable_record(self, source_id, signal_type_id, start_date, frequency, list_of_values):
-        pass
+    def get(self, model, **kwargs):
+        return self.get_session.query(model).filter_by(**kwargs).first()
 
-    def write_numeric(self, source_id, signal_type_id, timestamp, value):
-        pass
+    def update(self, model, id, **kwargs):
+        session = self._session_class()
+
+        try:
+            session.query(model).filter(model.id == id).update(kwargs)
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+        return self.get(model, id=id)
+
+    def delete(self, model, id):
+        o = model(id=id)
+
+        session = self._session_class()
+        try:
+            session.add(o)
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+        return self.get(model, id=id)
+
+    def get_all(self, model, **kwargs):
+        return self.get_session.query(model).filter_by(**kwargs).all()

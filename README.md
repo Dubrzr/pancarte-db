@@ -4,16 +4,16 @@
 
 ### What does it stores?
 
-From the monitors:
+From the monitors (immutable data):
 
 * Raw waveforms (high frequency data, does not stores timestamps for each value, needs constant frequency data)
 * Numerics (low frequency data, stores a value with a timestamp)
+* Metadata such as bed_id, signal_type...
 
-From other sources:
+From other sources (mutable data):
 
 * Timestamp-based annotations
 * Timerange-based annotations
-* Metadata such as bed_id, signal_type...
 
 
 ### What can it do?
