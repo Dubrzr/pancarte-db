@@ -4,7 +4,7 @@
     "name": "schema",
     "fields": [
         {
-            "name": "start_date",
+            "name": "start_date_micros",
             "type": "long",
             "logicalType" : "timestamp-micros"
         },
@@ -29,7 +29,16 @@
                         }
                     },
                     {
-                        "name": "start_date",
+                        "name": "start_date_micros",
+                        "type": {
+                            "type": "array",
+                            "items": "long",
+                            "logicalType" : "timestamp-micros"
+                        }
+
+                    },
+                    {
+                        "name": "end_date_micros",
                         "type": {
                             "type": "array",
                             "items": "long",
@@ -87,7 +96,7 @@
                         }
                     },
                     {
-                        "name": "timestamp",
+                        "name": "timestamp_micros",
                         "type": {
                             "type": "array",
                             "items": "long",

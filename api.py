@@ -16,7 +16,7 @@ class App:
     app = Flask(__name__)
     api = Api(app)
 
-    def add_resource_class(self, c, name, url, **kwargs):
+    def add_mutable_resource_class(self, c, name, url, **kwargs):
         self.api.add_resource(c, url + "/<string:id>", **kwargs)
 
         class WrapClass(c):
@@ -165,13 +165,13 @@ class TimerangeAnnotationResource(BaseResource):
         return super()._delete(id=id)
 
 
-app.add_resource_class(AnnotationTypeResource, 'at', '/annotations/types')
-app.add_resource_class(TimestampAnnotationResource, 'ts', '/annotations/timestamp')
-app.add_resource_class(TimerangeAnnotationResource, 'tr', '/annotations/timerange')
+app.add_mutable_resource_class(AnnotationTypeResource, 'at', '/annotations/types')
+app.add_mutable_resource_class(TimestampAnnotationResource, 'ts', '/annotations/timestamp')
+app.add_mutable_resource_class(TimerangeAnnotationResource, 'tr', '/annotations/timerange')
 
-# * [ ] Get data from date A to date B
+# * [x] Get data from date A to date B
 # * [ ] Get data where record_length >= 2hours
-# * [ ] Get data where bed_id=X, signal_type=ECG
+# * [x] Get data where bed_id=X, signal_type=ECG
 # * [ ] Get data where there are arythmia annotations
 #
 
