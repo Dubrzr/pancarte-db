@@ -6,3 +6,4 @@ Flask==0.12
 Flask-RESTful==0.3.6
 pandas==0.22.0
 tables==3.4.3
+msgpack==0.5.6

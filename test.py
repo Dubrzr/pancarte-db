@@ -20,7 +20,7 @@ if __name__ == "__main__":
 
     def a():
 
-        store = ImmutableStore(location='./test_db/', avro_schema='data.v1.avsc', cache_size=cache_size,
+        store = ImmutableStore(location='./test_db/', cache_size=cache_size,
                                time_margin=datetime.timedelta(seconds=1))
 
         heartbeat = [-0.145, -0.145, -0.145, -0.145, -0.145, -0.145, -0.145, -0.145, -0.12, -0.135, -0.145, -0.15, -0.16,
@@ -92,7 +92,7 @@ if __name__ == "__main__":
                 freq = 125
                 values = rp.get_batch(batch_size=freq).tolist()
                 store.write_hf(source_id=source_id, type_id=type_id,
-                               start_date_micros=dt_to_micro_timestamp(datetime.datetime.now()), frequency=freq, values=values)
+                               start_micros=dt_to_micro_timestamp(datetime.datetime.now()), frequency=freq, values=values)
             time.sleep(1.0 / write_at)
 
     def b():
@@ -102,4 +102,4 @@ if __name__ == "__main__":
         for block in store.read_blocks(start_micros=1525255489386676, end_micros=1525255508309096, source_id=3, hf=False):
             print(block)
 
-    b()
+    a()

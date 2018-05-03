@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from db.tables import AnnotationType, TimerangeAnnotation, TimestampAnnotation
 from storage import ImmutableStore, MutableStore
 
-immutable_store = ImmutableStore(location='local_db', avro_schema='data.v1.avsc')
+immutable_store = ImmutableStore(location='test_db')
 mutable_store = MutableStore()
 
 
@@ -30,6 +30,9 @@ class App:
 
         self.api.add_resource(WrapClass, url, **kwargs)
 
+    def add_immutable_resource_class(self, c, name, url, **kwargs):
+        self.api.add_resource(c, url, **kwargs)
+
     def run(self, host=None, port=None, debug=None, **options):
         self.app.run(host=host, port=port, debug=debug, **options)
 
@@ -37,14 +40,10 @@ class App:
 app = App()
 
 
-def abort404(model, **kwargs):
-    abort(404)#, reason="{}({}) does not exists!".format(model.__name__, ', '.join([k + '=' + v for k, v in kwargs.items()])))
-
-
 def get_object_or_404(model, **kwargs):
     result = mutable_store.get(model, **kwargs)
     if result is None:
-        abort404(model, **kwargs)
+        abort(404)
     return result
 
 
@@ -52,7 +51,7 @@ def get_json_or_404(model, **kwargs):
     return get_object_or_404(model, **kwargs).to_json()
 
 
-class BaseResource(Resource):
+class MutableResource(Resource):
     model = None
 
     def _all(self):
@@ -69,7 +68,7 @@ class BaseResource(Resource):
         try:
             o = mutable_store.update(self.model, id, **kwargs)
         except IntegrityError:
-            abort404(self.model, id=id, **kwargs)
+            abort(404)
 
         return o.to_json()
 
@@ -81,7 +80,7 @@ class BaseResource(Resource):
         return '', 204
 
 
-class AnnotationTypeResource(BaseResource):
+class AnnotationTypeResource(MutableResource):
     model = AnnotationType
 
     def post(self):
@@ -103,7 +102,7 @@ class AnnotationTypeResource(BaseResource):
         return super()._delete(id=id)
 
 
-class TimestampAnnotationResource(BaseResource):
+class TimestampAnnotationResource(MutableResource):
     model = TimestampAnnotation
 
     def post(self):
@@ -133,7 +132,7 @@ class TimestampAnnotationResource(BaseResource):
         return super()._delete(id=id)
 
 
-class TimerangeAnnotationResource(BaseResource):
+class TimerangeAnnotationResource(MutableResource):
     model = TimerangeAnnotation
 
     def post(self):
@@ -165,12 +164,59 @@ class TimerangeAnnotationResource(BaseResource):
         return super()._delete(id=id)
 
 
+class WaveformResource(Resource):
+    def put(self):
+        abort(404)
+
+    def post(self):
+        try:
+            if 'hf_source_id' in request.form:
+                immutable_store.write_lf(
+                    source_id=request.form['hf_source_id'],
+                    type_id=request.form['hf_type_id'],
+                    timestamp_micros=request.form['hf_timestamp_micros'],
+                    value=request.form.get['hf_value'],
+                )
+            else:
+                immutable_store.write_hf(
+                    source_id=request.form['hf_source_id'],
+                    type_id=request.form['hf_type_id'],
+                    start_micros=request.form['hf_start_micros'],
+                    frequency=request.form['hf_value'],
+                    values=request.form['hf_values']
+                )
+        except KeyError:
+            abort(400)
+        return '', 201
+
+    def get(self):
+        try:
+            source_id = request.args.get('source_id', None)
+            type_id = request.args.get('type_id', None)
+            lf = request.args['lf'] == 'true'
+            hf = request.args['hf'] == 'true'
+            start_micros = int(request.args['start_micros'])
+            end_micros = int(request.args['end_micros'])
+        except KeyError:
+            abort(400)
+
+        filters = {}
+        if source_id is not None:
+            filters['source_id'] = source_id
+        if type_id is not None:
+            filters['type_id'] = type_id
+        return immutable_store.read_all_blocks(start_micros=start_micros, end_micros=end_micros, lf=lf, hf=hf, **filters)
+
+    def delete(self, id):
+        abort(404)
+
+
 app.add_mutable_resource_class(AnnotationTypeResource, 'at', '/annotations/types')
 app.add_mutable_resource_class(TimestampAnnotationResource, 'ts', '/annotations/timestamp')
 app.add_mutable_resource_class(TimerangeAnnotationResource, 'tr', '/annotations/timerange')
+app.add_immutable_resource_class(WaveformResource, 'wf', '/waveforms')
 
 # * [x] Get data from date A to date B
-# * [ ] Get data where record_length >= 2hours
 # * [x] Get data where bed_id=X, signal_type=ECG
 # * [ ] Get data where there are arythmia annotations
 #

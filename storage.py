@@ -3,6 +3,7 @@ import os
 import datetime
 import pathlib
 
+import msgpack
 import numpy as np
 import pandas as pd
 from sortedcontainers import SortedListWithKey
@@ -87,8 +88,7 @@ class MemoryCache:
 
 
 class ImmutableStore:
-    def __init__(self, location: str, avro_schema: str, cache_size: int = 1E10,
-                 time_margin=datetime.timedelta(minutes=5), partitioning_depth=4):
+    def __init__(self, location: str, cache_size: int = 1E10, time_margin=datetime.timedelta(minutes=5), partitioning_depth=4):
         """
         cache_size: the number of values needed to dump the cache to disk
         """
@@ -99,7 +99,7 @@ class ImmutableStore:
         # self.avrorwer = AvroRWer(schema=avro_schema)
         self.datatypes = {
             'lf': ['source_id', 'type_id', 'value', 'timestamp_micros'],
-            'hf': ['source_id', 'type_id', 'sizes', 'values', 'start_date_micros', 'end_date_micros', 'frequency']
+            'hf': ['source_id', 'type_id', 'sizes', 'values', 'start_micros', 'end_micros', 'frequency']
         }
 
     def _write_block_callback(self, full_cache: dict):
@@ -116,8 +116,8 @@ class ImmutableStore:
             'hf': {
                 'source_id': [],
                 'type_id': [],
-                'start_date_micros': [],
-                'end_date_micros': [],
+                'start_micros': [],
+                'end_micros': [],
                 'frequency': [],
                 'sizes': [],
                 'values': [],
@@ -145,7 +145,7 @@ class ImmutableStore:
         dst_dir = os.path.join(self.location, dt_date_first.strftime('/'.join(self.partitioning)))
         pathlib.Path(dst_dir).mkdir(parents=True, exist_ok=True)
 
-        dst = os.path.join(dst_dir, '{}-{}.v1.avro'.format(date_start, date_end))
+        dst = os.path.join(dst_dir, '{}-{}.pickle.v4'.format(date_start, date_end))
 
 
         lfdf = pd.DataFrame.from_dict(df['lf']).astype({'source_id': int,
@@ -154,8 +154,8 @@ class ImmutableStore:
                                                         'value': float})
         hfdf = pd.DataFrame.from_dict(df['hf']).astype({'source_id': int,
                                                         'type_id': int,
-                                                        'start_date_micros': int,
-                                                        'end_date_micros': int,
+                                                        'start_micros': int,
+                                                        'end_micros': int,
                                                         'frequency': float,
                                                         'ids': int})
 
@@ -176,11 +176,11 @@ class ImmutableStore:
                              'value': value},
                             number_of_values=1)
 
-    def write_hf(self, source_id: int, type_id: int, start_date_micros: int, frequency: float, values: list):
-        end_date_micros = start_date_micros + int((len(values) / frequency) * 1E6)
-        self.cache.add_data(start_date_micros, 'hf',
-                            {'source_id': source_id, 'type_id': type_id, 'start_date_micros': start_date_micros,
-                             'end_date_micros': end_date_micros,
+    def write_hf(self, source_id: int, type_id: int, start_micros: int, frequency: float, values: list):
+        end_micros = start_micros + int((len(values) / frequency) * 1E6)
+        self.cache.add_data(start_micros, 'hf',
+                            {'source_id': source_id, 'type_id': type_id, 'start_micros': start_micros,
+                             'end_micros': end_micros,
                              'frequency': frequency, 'sizes': len(values), 'values': values},
                             number_of_values=len(values))
 
@@ -222,6 +222,9 @@ class ImmutableStore:
     def read_blocks(self, start_micros, end_micros, lf=True, hf=True, **filters):
         if not lf and not hf:
             yield from []
+            return
+
+        t1 = datetime.datetime.now()
 
         blocks = self._find_blocks(start_micros, end_micros)
 
@@ -233,7 +236,7 @@ class ImmutableStore:
             if k == 'lf':
                 where = 'timestamp_micros >= {} & timestamp_micros < {}'.format(start_micros, end_micros)
             elif k == 'hf':
-                where = 'start_date_micros >= {} & end_date_micros < {}'.format(start_micros, end_micros)
+                where = 'start_micros >= {} & end_micros < {}'.format(start_micros, end_micros)
 
             for fn, fv in filters.items():
                 where += ' & {}=={}'.format(fn, fv)
@@ -245,7 +248,7 @@ class ImmutableStore:
             if k == 'lf':
                 df = df.sort_values('timestamp_micros')
             elif k == 'hf':
-                df = df.sort_values('start_date_micros')
+                df = df.sort_values('start_micros')
 
             if k == 'hf':
                 tmp = []
@@ -254,17 +257,26 @@ class ImmutableStore:
                         tmp.append(json_store['hf_' + str(i)].values.transpose().tolist()[0])
                 del df['ids']
                 df['values'] = tmp
-            return df
+            dff = df.transpose().to_dict('split')
+            result = {}
+            for m, col in enumerate(dff['index']):
+                if col == 'sizes':
+                    continue
+                result[col] = dff['data'][m]
+            return result
 
         for block in blocks:
             res = {}
+            t1 = datetime.datetime.now()
             with open(block, 'rb') as b:
                 print(block)
                 json_store = pickle.load(b)
+            print('pickle.load took {}'.format(datetime.datetime.now()-t1))
             if lf:
                 res['lf'] = _subfun(json_store, 'lf')
             if hf:
                 res['hf'] = _subfun(json_store, 'hf')
+            print('yield took {}'.format(datetime.datetime.now()-t1))
             yield res
 
     def read_all_blocks(self, start_micros, end_micros, lf=True, hf=True, **filters):
@@ -278,20 +290,21 @@ class ImmutableStore:
             'hf': {
                 'source_id': [],
                 'type_id': [],
-                'start_date_micros': [],
-                'end_date_micros': [],
+                'start_micros': [],
+                'end_micros': [],
                 'frequency': [],
-                'sizes': [],
                 'values': [],
             }
         }
         for d in self.read_blocks(start_micros, end_micros, lf=lf, hf=hf, **filters):
-            for k in ['lf', 'hf']:
+            ff = []
+            if lf:
+                ff.append('lf')
+            if hf:
+                ff.append('hf')
+            for k in ff:
                 for kk, vv in d[k].items():
-                    if kk == 'values':
-                        dd[k][kk].append(vv)
-                    else:
-                        dd[k][kk].append(vv)
+                    dd[k][kk] += vv
         return dd
 
 
