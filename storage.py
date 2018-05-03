@@ -1,4 +1,3 @@
-import pickle
 import os
 import datetime
 import pathlib
@@ -36,6 +35,7 @@ def numpy_fillna(data):
 
 
 class MemoryCache:
+    # TODO: background delay before forcing flush
     def __init__(self, cache_size, time_margin, callback_when_full):
         self.cache_size = cache_size
         self.time_margin = time_margin
@@ -99,14 +99,14 @@ class ImmutableStore:
         # self.avrorwer = AvroRWer(schema=avro_schema)
         self.datatypes = {
             'lf': ['source_id', 'type_id', 'value', 'timestamp_micros'],
-            'hf': ['source_id', 'type_id', 'sizes', 'values', 'start_micros', 'end_micros', 'frequency']
+            'hf': ['source_id', 'type_id', 'values', 'start_micros', 'end_micros', 'frequency']
         }
 
     def _write_block_callback(self, full_cache: dict):
         date_start = None
         date_end = None
 
-        df = {
+        json_store = {
             'lf': {
                 'source_id': [],
                 'type_id': [],
@@ -119,7 +119,6 @@ class ImmutableStore:
                 'start_micros': [],
                 'end_micros': [],
                 'frequency': [],
-                'sizes': [],
                 'values': [],
             }
         }
@@ -134,41 +133,17 @@ class ImmutableStore:
 
             for (timestamp, data) in sorted_list:
                 for sub_dtt in self.datatypes[dtt]:
-                    df[dtt][sub_dtt].append(data[sub_dtt])
-
-        df['hf']['ids'] = list(range(len(df['hf']['source_id'])))
-        df['hf_vals'] = df['hf']['values']
-        del df['hf']['values']
+                    json_store[dtt][sub_dtt].append(data[sub_dtt])
 
         dt_date_first = datetime.datetime.fromtimestamp(date_start / 1E6)
 
         dst_dir = os.path.join(self.location, dt_date_first.strftime('/'.join(self.partitioning)))
         pathlib.Path(dst_dir).mkdir(parents=True, exist_ok=True)
 
-        dst = os.path.join(dst_dir, '{}-{}.pickle.v4'.format(date_start, date_end))
-
-
-        lfdf = pd.DataFrame.from_dict(df['lf']).astype({'source_id': int,
-                                                        'type_id': int,
-                                                        'timestamp_micros': int,
-                                                        'value': float})
-        hfdf = pd.DataFrame.from_dict(df['hf']).astype({'source_id': int,
-                                                        'type_id': int,
-                                                        'start_micros': int,
-                                                        'end_micros': int,
-                                                        'frequency': float,
-                                                        'ids': int})
-
-        json_store = {
-            'lf': lfdf,
-            'hf': hfdf,
-        }
-
-        for i, vs in enumerate(df['hf_vals']):
-            json_store['hf_' + str(i)] = pd.DataFrame.from_dict(vs)
+        dst = os.path.join(dst_dir, '{}-{}.msgpck'.format(date_start, date_end))
 
         with open(dst, 'wb') as f:
-            pickle.dump(obj=json_store, file=f, protocol=4)
+            msgpack.pack(json_store, f)
 
     def write_lf(self, source_id: int, type_id: int, timestamp_micros: int, value: float):
         self.cache.add_data(timestamp_micros, 'lf',
@@ -181,7 +156,7 @@ class ImmutableStore:
         self.cache.add_data(start_micros, 'hf',
                             {'source_id': source_id, 'type_id': type_id, 'start_micros': start_micros,
                              'end_micros': end_micros,
-                             'frequency': frequency, 'sizes': len(values), 'values': values},
+                             'frequency': frequency, 'values': values},
                             number_of_values=len(values))
 
     def _find_blocks(self, start_micros, end_micros):
@@ -224,7 +199,7 @@ class ImmutableStore:
             yield from []
             return
 
-        t1 = datetime.datetime.now()
+        t0 = datetime.datetime.now()
 
         blocks = self._find_blocks(start_micros, end_micros)
 
@@ -232,16 +207,25 @@ class ImmutableStore:
             if k not in ['lf', 'hf']:
                 raise NotImplementedError()
 
-            where = ''
             if k == 'lf':
+                df = pd.DataFrame.from_dict(json_store['lf']).astype({'source_id': int,
+                                                              'type_id': int,
+                                                              'timestamp_micros': int,
+                                                              'value': float})
                 where = 'timestamp_micros >= {} & timestamp_micros < {}'.format(start_micros, end_micros)
             elif k == 'hf':
+                df = pd.DataFrame.from_dict(json_store['hf']).astype({'source_id': int,
+                                                              'type_id': int,
+                                                              'start_micros': int,
+                                                              'end_micros': int,
+                                                              'frequency': float,
+                                                              'values': list})
                 where = 'start_micros >= {} & end_micros < {}'.format(start_micros, end_micros)
+            else:
+                raise NotImplementedError()
 
             for fn, fv in filters.items():
                 where += ' & {}=={}'.format(fn, fv)
-
-            df = json_store[k]
 
             df = df.query(where)
 
@@ -249,19 +233,9 @@ class ImmutableStore:
                 df = df.sort_values('timestamp_micros')
             elif k == 'hf':
                 df = df.sort_values('start_micros')
-
-            if k == 'hf':
-                tmp = []
-                if len(df['ids']) > 0:
-                    for i in df['ids']:
-                        tmp.append(json_store['hf_' + str(i)].values.transpose().tolist()[0])
-                del df['ids']
-                df['values'] = tmp
             dff = df.transpose().to_dict('split')
             result = {}
             for m, col in enumerate(dff['index']):
-                if col == 'sizes':
-                    continue
                 result[col] = dff['data'][m]
             return result
 
@@ -270,13 +244,14 @@ class ImmutableStore:
             t1 = datetime.datetime.now()
             with open(block, 'rb') as b:
                 print(block)
-                json_store = pickle.load(b)
-            print('pickle.load took {}'.format(datetime.datetime.now()-t1))
+                json_store = msgpack.unpack(b, raw=False)
+                # json_store = pickle.load(b)
+            print('msgpack.unpack took {}'.format(datetime.datetime.now()-t1))
             if lf:
                 res['lf'] = _subfun(json_store, 'lf')
             if hf:
                 res['hf'] = _subfun(json_store, 'hf')
-            print('yield took {}'.format(datetime.datetime.now()-t1))
+            print('yield took {}'.format(datetime.datetime.now()-t0))
             yield res
 
     def read_all_blocks(self, start_micros, end_micros, lf=True, hf=True, **filters):

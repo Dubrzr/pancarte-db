@@ -90,7 +90,7 @@ if __name__ == "__main__":
                                timestamp_micros=dt_to_micro_timestamp(datetime.datetime.now()), value=value)
             else:
                 freq = 125
-                values = rp.get_batch(batch_size=freq).tolist()
+                values = rp.get_batch(batch_size=int(random.uniform(freq-30, freq+30))).tolist()
                 store.write_hf(source_id=source_id, type_id=type_id,
                                start_micros=dt_to_micro_timestamp(datetime.datetime.now()), frequency=freq, values=values)
             time.sleep(1.0 / write_at)
