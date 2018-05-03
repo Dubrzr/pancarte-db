@@ -8,6 +8,8 @@ Hybrid database to store, query and analize waveform data and annotations with a
 
 This database originally aims to solve the problem of storing healthcare monitor waveforms while querying them or analyse them with Hadoop Hive.
 
+**This project is only a POC for now.**
+
 ## How it works
 
 ### What does it stores?
