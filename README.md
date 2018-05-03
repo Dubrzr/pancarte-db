@@ -4,7 +4,7 @@ Hybrid database to store, query and analize waveform data and annotations.
 
 | Real-time insertions | Big-data analytics (Hadoop...) | Fast get with filtering |
 |:--------------------:|:------------------------------:|:-----------------------:|
-|         x            |                 x              |             x           |
+|         ✓            |                 ✓              |             ✓           |
 
 This database originally aims to solve the problem of storing healthcare monitor waveforms while querying them and analyse them with Hadoop Hive.
 
