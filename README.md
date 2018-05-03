@@ -41,8 +41,10 @@ There are two types of data:
 Immutable data is directly stored in files that are not supposed to be editable.
 Editable/Expandable data is stored in an easily queryable store (sqlite).
 
+![alt text](architecture.png)
+
 ## Running it
 
 ```
-python3 server.py hostname port
+python3 api.py hostname port
 ```
