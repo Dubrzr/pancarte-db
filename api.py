@@ -172,17 +172,17 @@ class WaveformResource(Resource):
         try:
             if 'hf_source_id' in request.form:
                 immutable_store.write_lf(
-                    source_id=request.form['hf_source_id'],
-                    type_id=request.form['hf_type_id'],
-                    timestamp_micros=request.form['hf_timestamp_micros'],
-                    value=request.form.get['hf_value'],
+                    source_id=request.form['lf_source_id'],
+                    type_id=request.form['lf_type_id'],
+                    timestamp_micros=request.form['lf_timestamp_micros'],
+                    value=request.form.get['lf_value'],
                 )
             else:
                 immutable_store.write_hf(
                     source_id=request.form['hf_source_id'],
                     type_id=request.form['hf_type_id'],
                     start_micros=request.form['hf_start_micros'],
-                    frequency=request.form['hf_value'],
+                    frequency=request.form['hf_frequency'],
                     values=request.form['hf_values']
                 )
         except KeyError:
