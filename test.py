@@ -96,7 +96,7 @@ if __name__ == "__main__":
             time.sleep(1.0 / write_at)
 
     def b():
-        store = ImmutableStore(location='./test_db/', avro_schema='data.v1.avsc', cache_size=cache_size,
+        store = ImmutableStore(location='./test_db/', cache_size=cache_size,
                                time_margin=datetime.timedelta(seconds=1))
         # for block in store.read_blocks(start_micros=1524750006713157, end_micros=1524750200017953):
         for block in store.read_blocks(start_micros=1525255489386676, end_micros=1525255508309096, source_id=3, hf=False):
