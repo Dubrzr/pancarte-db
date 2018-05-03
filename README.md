@@ -130,8 +130,8 @@ An annotation type might be like 'bradycardia arrhythmia', 'start of record', 'e
 -> returns all the high frequency (hf) data between 1525349279579912 and 1525349290101982 that has source_id=7 and type_id=2
 
 * GET <api-url>/waveforms (parameters=lf_source_id:int, lf_type_id:int, lf_value:float, lf_timestamp_micros:int)
--> returns the created low frequency waveform with http code 201
+-> returns http code 201 if successful
 
 * GET <api-url>/waveforms (parameters=hf_source_id:int, hf_type_id:int, hf_frequency:float, hf_start_micros:int, hf_values:list<float>)
--> returns the created high frequency waveform with http code 201
+-> returns http code 201 if successful
 ```
