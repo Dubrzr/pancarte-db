@@ -1,13 +1,12 @@
 # Pancarte DB
 
-Hybrid database to store, query and analize waveform data and annotations.
+Hybrid database to store, query and analize waveform data and annotations with an HTTP API.
 
 | Real-time insertions | Big-data analytics (Hadoop...) | Fast get with filtering |
 |:--------------------:|:------------------------------:|:-----------------------:|
 |         ✓            |                 ✓              |             ✓           |
 
-This database originally aims to solve the problem of storing healthcare monitor waveforms while querying them and analyse them with Hadoop Hive.
-
+This database originally aims to solve the problem of storing healthcare monitor waveforms while querying them or analyse them with Hadoop Hive.
 
 ## How it works
 
