@@ -1,5 +1,14 @@
 # Pancarte DB
 
+Hybrid database to store, query and analize waveform data and annotations.
+
+| Real-time insertions | Big-data analytics (Hadoop...) | Fast get with filtering |
+|:--------------------:|:------------------------------:|:-----------------------:|
+|         x            |                 x              |             x           |
+
+This database originally aims to solve the problem of storing healthcare monitor waveforms while querying them and analyse them with Hadoop Hive.
+
+
 ## How it works
 
 ### What does it stores?
@@ -39,8 +48,9 @@ There are two types of data:
 * Immutable: waveforms and numerics
 * Editable/Expandable: metadata and annotations
 
-Immutable data is directly stored in files that are not supposed to be editable.
-Editable/Expandable data is stored in an easily queryable store (sqlite).
+Immutable data is directly stored in files that are not supposed to be editable. It must be really fast when deserializing them. 
+
+Editable/Expandable data is stored in an easily queryable store (sqlite/pgsql/mysql/... - must be compatible with sqlalchemy).
 
 ![alt text](architecture.png)
 
