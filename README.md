@@ -20,12 +20,15 @@ Immutable data:
 * Numerics (low frequency data, stores a value with a timestamp)
 * Metadata such as source_id, type_id...
 
+![alt text](db-schema-immutable.png)
+
 Mutable data:
 
 * Annotation types
 * Timestamp-based annotations
 * Timerange-based annotations
 
+![alt text](db-schema-mutable.png)
 
 ### What can it do?
 

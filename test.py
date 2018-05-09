@@ -10,7 +10,7 @@ from dsfaker.generators.series import RepeatPattern
 from storage import ImmutableStore, dt_to_micro_timestamp
 
 if __name__ == "__main__":
-    filesize = 2 ** 13  # bytes
+    filesize = 2 ** 15  # bytes
     write_at = 10000  # Hz
 
     pctg_numerics = 0.2
@@ -21,7 +21,7 @@ if __name__ == "__main__":
     def a():
 
         store = ImmutableStore(location='./test_db/', cache_size=cache_size,
-                               time_margin=datetime.timedelta(seconds=1))
+                               time_margin=datetime.timedelta(seconds=20))
 
         heartbeat = [-0.145, -0.145, -0.145, -0.145, -0.145, -0.145, -0.145, -0.145, -0.12, -0.135, -0.145, -0.15, -0.16,
                      -0.155, -0.16, -0.175, -0.18, -0.185, -0.17, -0.155, -0.175, -0.18, -0.19, -0.18, -0.155, -0.135,
@@ -86,20 +86,29 @@ if __name__ == "__main__":
 
             if random.uniform(0, 1) <= pctg_numerics:
                 value = random.uniform(0, 180)
-                store.write_lf(source_id=source_id, type_id=type_id,
-                               timestamp_micros=dt_to_micro_timestamp(datetime.datetime.now()), value=value)
+                store.write_lf(source_id=source_id,
+                               type_id=type_id,
+                               timestamp_micros=dt_to_micro_timestamp(datetime.datetime.now()),
+                               value=value)
             else:
                 freq = 125
                 values = rp.get_batch(batch_size=int(random.uniform(freq-30, freq+30))).tolist()
-                store.write_hf(source_id=source_id, type_id=type_id,
-                               start_micros=dt_to_micro_timestamp(datetime.datetime.now()), frequency=freq, values=values)
+                store.write_hf(source_id=source_id,
+                               type_id=type_id,
+                               start_micros=dt_to_micro_timestamp(datetime.datetime.now()),
+                               frequency=freq,
+                               values=values)
             time.sleep(1.0 / write_at)
 
     def b():
-        store = ImmutableStore(location='./test_db/', cache_size=cache_size,
+        store = ImmutableStore(location='./test_db/',
+                               cache_size=cache_size,
                                time_margin=datetime.timedelta(seconds=1))
         # for block in store.read_blocks(start_micros=1524750006713157, end_micros=1524750200017953):
-        for block in store.read_blocks(start_micros=1525255489386676, end_micros=1525255508309096, source_id=3, hf=False):
+        for block in store.read_blocks(start_micros=1525255489386676,
+                                       end_micros=1525255508309096,
+                                       source_id=3,
+                                       hf=False):
             print(block)
 
     a()

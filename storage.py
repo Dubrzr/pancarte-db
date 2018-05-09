@@ -36,10 +36,11 @@ def numpy_fillna(data):
 
 class MemoryCache:
     # TODO: background delay before forcing flush
-    def __init__(self, cache_size, time_margin, callback_when_full):
+    def __init__(self, cache_size, time_margin, callback_when_full, source_id):
         self.cache_size = cache_size
         self.time_margin = time_margin
         self.callback_when_full = callback_when_full
+        self.source_id = source_id
 
         self.dump = False
 
@@ -77,7 +78,7 @@ class MemoryCache:
                     break
             if do:
                 # TODO: Background-ize
-                self.callback_when_full(self.cache)
+                self.callback_when_full(self.cache, self.source_id)
 
                 self.cache = self.next_cache
                 self.cache_nov = self.next_cache_nov
@@ -94,27 +95,27 @@ class ImmutableStore:
         """
         self.location = location
         self.partitioning = '%Y/%m/%d/%H/%M/%S'.split('/')[:partitioning_depth]
-        self.cache = MemoryCache(cache_size=cache_size, time_margin=time_margin,
-                                 callback_when_full=self._write_block_callback)
-        # self.avrorwer = AvroRWer(schema=avro_schema)
+
+        self.caches = {}
+        self.cache_size = cache_size
+        self.time_margin = time_margin
+
         self.datatypes = {
-            'lf': ['source_id', 'type_id', 'value', 'timestamp_micros'],
-            'hf': ['source_id', 'type_id', 'values', 'start_micros', 'end_micros', 'frequency']
+            'lf': ['type_id', 'value', 'timestamp_micros'],
+            'hf': ['type_id', 'values', 'start_micros', 'end_micros', 'frequency']
         }
 
-    def _write_block_callback(self, full_cache: dict):
+    def _write_block_callback(self, full_cache: dict, source_id):
         date_start = None
         date_end = None
 
         json_store = {
             'lf': {
-                'source_id': [],
                 'type_id': [],
                 'timestamp_micros': [],
                 'value': [],
             },
             'hf': {
-                'source_id': [],
                 'type_id': [],
                 'start_micros': [],
                 'end_micros': [],
@@ -137,7 +138,7 @@ class ImmutableStore:
 
         dt_date_first = datetime.datetime.fromtimestamp(date_start / 1E6)
 
-        dst_dir = os.path.join(self.location, dt_date_first.strftime('/'.join(self.partitioning)))
+        dst_dir = os.path.join(self.location, str(source_id), dt_date_first.strftime('/'.join(self.partitioning)))
         pathlib.Path(dst_dir).mkdir(parents=True, exist_ok=True)
 
         dst = os.path.join(dst_dir, '{}-{}.msgpck'.format(date_start, date_end))
@@ -145,21 +146,30 @@ class ImmutableStore:
         with open(dst, 'wb') as f:
             msgpack.pack(json_store, f)
 
+    def _create_cache_if_not_exists(self, source_id):
+        if source_id not in self.caches:
+            self.caches[source_id] = MemoryCache(cache_size=self.cache_size, time_margin=self.time_margin,
+                                                 callback_when_full=self._write_block_callback, source_id=source_id)
+
     def write_lf(self, source_id: int, type_id: int, timestamp_micros: int, value: float):
-        self.cache.add_data(timestamp_micros, 'lf',
-                            {'source_id': source_id, 'type_id': type_id, 'timestamp_micros': timestamp_micros,
-                             'value': value},
-                            number_of_values=1)
+        self._create_cache_if_not_exists(source_id)
+
+        self.caches[source_id].add_data(timestamp_micros, 'lf',
+                                        {'type_id': type_id, 'timestamp_micros': timestamp_micros,
+                                         'value': value},
+                                        number_of_values=1)
 
     def write_hf(self, source_id: int, type_id: int, start_micros: int, frequency: float, values: list):
-        end_micros = start_micros + int((len(values) / frequency) * 1E6)
-        self.cache.add_data(start_micros, 'hf',
-                            {'source_id': source_id, 'type_id': type_id, 'start_micros': start_micros,
-                             'end_micros': end_micros,
-                             'frequency': frequency, 'values': values},
-                            number_of_values=len(values))
+        self._create_cache_if_not_exists(source_id)
 
-    def _find_blocks(self, start_micros, end_micros):
+        end_micros = start_micros + int((len(values) / frequency) * 1E6)
+        self.caches[source_id].add_data(start_micros, 'hf',
+                                        {'type_id': type_id, 'start_micros': start_micros,
+                                         'end_micros': end_micros,
+                                         'frequency': frequency, 'values': values},
+                                        number_of_values=len(values))
+
+    def _find_blocks(self, start_micros, end_micros, source_id=None):
         dt_start = micros_timestamp_to_dt(start_micros)
         dt_end = micros_timestamp_to_dt(end_micros)
 
@@ -192,7 +202,13 @@ class ImmutableStore:
                         result += rec_explore(dir, previous + [p], depth + 1)
                 return result
 
-        return sorted(rec_explore(self.location))
+        if source_id is None:
+            result = []
+            for source_id in os.listdir(self.location):
+                result += [(source_id, e) for e in rec_explore(os.path.join(self.location, source_id))]
+            return sorted(result, key=lambda x: '/'.join(x[1].split('/')[1:]))
+
+        return [(str(source_id), e) for e in sorted(rec_explore(os.path.join(self.location, str(source_id))))]
 
     def read_blocks(self, start_micros, end_micros, lf=True, hf=True, **filters):
         if not lf and not hf:
@@ -201,20 +217,20 @@ class ImmutableStore:
 
         t0 = datetime.datetime.now()
 
-        blocks = self._find_blocks(start_micros, end_micros)
+        blocks = self._find_blocks(start_micros, end_micros, source_id=filters.get('source_id', None))
 
         def _subfun(json_store, k):
             if k not in ['lf', 'hf']:
                 raise NotImplementedError()
 
             if k == 'lf':
-                df = pd.DataFrame.from_dict(json_store['lf']).astype({'source_id': int,
+                df = pd.DataFrame.from_dict(json_store['lf']).astype({
                                                               'type_id': int,
                                                               'timestamp_micros': int,
                                                               'value': float})
                 where = 'timestamp_micros >= {} & timestamp_micros < {}'.format(start_micros, end_micros)
             elif k == 'hf':
-                df = pd.DataFrame.from_dict(json_store['hf']).astype({'source_id': int,
+                df = pd.DataFrame.from_dict(json_store['hf']).astype({
                                                               'type_id': int,
                                                               'start_micros': int,
                                                               'end_micros': int,
@@ -225,7 +241,8 @@ class ImmutableStore:
                 raise NotImplementedError()
 
             for fn, fv in filters.items():
-                where += ' & {}=={}'.format(fn, fv)
+                if fn != 'source_id':
+                    where += ' & {}=={}'.format(fn, fv)
 
             df = df.query(where)
 
@@ -239,18 +256,19 @@ class ImmutableStore:
                 result[col] = dff['data'][m]
             return result
 
-        for block in blocks:
+        for source_id, block in blocks:
             res = {}
             t1 = datetime.datetime.now()
             with open(block, 'rb') as b:
                 print(block)
                 json_store = msgpack.unpack(b, raw=False)
-                # json_store = pickle.load(b)
             print('msgpack.unpack took {}'.format(datetime.datetime.now()-t1))
             if lf:
                 res['lf'] = _subfun(json_store, 'lf')
+                res['lf']['source_id'] = [source_id for _ in range(len(res['lf']['type_id']))]
             if hf:
                 res['hf'] = _subfun(json_store, 'hf')
+                res['hf']['source_id'] = [source_id for _ in range(len(res['hf']['type_id']))]
             print('yield took {}'.format(datetime.datetime.now()-t0))
             yield res
 

@@ -20,8 +20,8 @@ class App:
         self.api.add_resource(c, url + "/<string:id>", **kwargs)
 
         class WrapClass(c):
-            def get(self, *ar, **kw):
-                return c._all(self, *ar, **kw)
+            def get(self):
+                return c._all(self, **{k: v for k, v in request.args.items()})
 
             def post(self, *ar, **kw):
                 return c.post(self, *ar, **kw)
@@ -54,8 +54,8 @@ def get_json_or_404(model, **kwargs):
 class MutableResource(Resource):
     model = None
 
-    def _all(self):
-        return [o.to_json() for o in mutable_store.get_all(self.model)]
+    def _all(self, **kw):
+        return [o.to_json() for o in mutable_store.get_all(self.model, **kw)]
 
     def _post(self, **kwargs):
         try:
